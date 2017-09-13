@@ -1,0 +1,97 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+output: 
+  html_document:
+    keep_md: true
+---
+
+
+## Loading and preprocessing the data
+First we extract the activity data from the zipped archive.
+```{r loadingdata}
+temp<-unz("activity.zip","activity.csv")
+mydata<-read.csv(temp,header=TRUE)
+unlink(temp)
+remove(temp)
+```
+
+## What is mean total number of steps taken per day?
+```{r meansteps, echo=FALSE, results="asis"}
+temp <- mydata[!is.na(mydata$steps),]
+stepsByDate <- data.frame(with(temp, tapply(steps,date,sum,na.rm=TRUE)))
+names(stepsByDate) <- c("steps")
+
+options(digits=2)
+steps <- as.integer(mean(stepsByDate$steps,na.rm = TRUE))
+stepsmedian <- as.integer(median(stepsByDate$steps,na.rm=TRUE))
+```
+
+The **mean** number of steps is `r steps`, and the **median** is `r stepsmedian`. 
+
+```{r histogram, echo=FALSE}
+hist(stepsByDate$steps,main="Histogram of Total Daily Steps", xlab="Total Steps")
+abline(v=steps)
+```
+
+## What is the average daily activity pattern?
+
+```{r dailyactivity, echo=FALSE, message=FALSE}
+library(dplyr)
+x <- group_by(mydata,interval)
+y <- x %>% summarize(mean=mean(steps,na.rm=TRUE))
+maxsteps <- as.integer(y[which(y$mean==max(y$mean)),"interval"])
+```
+
+The **maximum number of steps** occur in interval `r maxsteps`.
+
+```{r plotforsteps, echo=FALSE}
+with(y,plot(interval,mean,type="l",main="Average Daily Pattern",xlab="Interval",ylab="Mean Steps"))
+```
+
+
+
+## Imputing missing values
+```{r impute, echo=FALSE, message=FALSE}
+numNAs <- sum(is.na(mydata$steps))
+
+library(plyr)   #for ddply
+library(Hmisc)  #for impute
+mydata2<-ddply(mydata,"interval",mutate,imputed.value=impute(steps,mean))
+
+stepsByDate <- data.frame(with(mydata2, tapply(imputed.value,date,sum,na.rm=TRUE)))
+names(stepsByDate) <- c("steps")
+options(digits=2)
+steps <- as.integer(mean(stepsByDate$steps,na.rm = TRUE))
+stepsmedian <- as.integer(median(stepsByDate$steps,na.rm=TRUE))
+
+```
+
+There are `r numNAs` missing values in the dataset. 
+
+In the imputed dataset, the **mean** number of steps is `r steps`, and the **median** is `r stepsmedian`. These values are nearly identical to the first part of the assignments. The imputations did not alter the mean/median values (though appears to have brought them closer together).
+
+```{r histogramimputed, echo=FALSE}
+hist(stepsByDate$steps,main="Histogram of Total Daily Steps in IMPUTED Dataset", xlab="Total Steps")
+abline(v=steps)
+```
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+mydata2 <- mutate(mydata2,weekday=weekdays(as.Date(date)))
+weekdata <- subset(mydata2,weekday %in% c("Monday","Wednesday","Tuesday","Thursday","Friday"))
+weekenddata <- subset(mydata2,weekday %in% c("Saturday","Sunday"))
+
+names(weekdata)<-c("steps","date","interval","steps2","weekday")
+names(weekenddata)<-c("steps","date","interval","steps2","weekday")
+
+library(dplyr)
+detach("package:plyr", unload=TRUE)
+y1 <- weekdata %>% group_by(interval) %>% summarise(mean=mean(steps2))
+y2 <- weekenddata %>% group_by(interval) %>% summarise(mean=mean(steps2))
+finaldata <- rbind(mutate(y1,week="weekday"),mutate(y2,week="weekend"))
+```
+
+```{r plotforsteps2, echo=FALSE}
+xyplot(mean~interval|week,data=finaldata,type="l",layout=c(1,2))
+```
